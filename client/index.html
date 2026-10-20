@@ -1,0 +1,113 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AI MONEY WAR</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{--bg:#07111f;--panel:#0d1b2d;--panel2:#10243a;--text:#f3f7fb;--muted:#9eb0c5;--line:#20364e;--accent:#58d68d;--danger:#ff6b6b;--gold:#f6c85f}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Segoe UI,Arial;background:radial-gradient(circle at top,#122a43,#07111f 45%);color:var(--text);min-height:100vh}
+button,input,textarea,select{font:inherit}button{cursor:pointer;border:0;border-radius:10px;padding:11px 15px;font-weight:700;background:var(--accent);color:#06120c}button.secondary{background:#1b3148;color:#dce9f5}button.danger{background:var(--danger);color:#260606}
+.wrap{max-width:1400px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:20px}.brand{font-size:26px;font-weight:900;letter-spacing:.04em}.pill{padding:7px 11px;border-radius:999px;background:#152b43;color:var(--muted);font-size:12px;font-weight:800}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.card{background:rgba(13,27,45,.9);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 14px 40px rgba(0,0,0,.18)}.span12{grid-column:span 12}.span8{grid-column:span 8}.span6{grid-column:span 6}.span4{grid-column:span 4}.span3{grid-column:span 3}
+h1,h2,h3{margin:0 0 10px}.muted{color:var(--muted)}.big{font-size:34px;font-weight:900}.money{font-variant-numeric:tabular-nums}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.space{justify-content:space-between}
+input,textarea,select{width:100%;background:#081727;color:#fff;border:1px solid var(--line);border-radius:9px;padding:10px}textarea{min-height:100px;resize:vertical}
+.asset{display:grid;grid-template-columns:1fr 130px 90px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #173047}.asset:last-child{border-bottom:0}.asset small{color:var(--muted)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:12px;text-transform:uppercase}.rank{font-weight:900;font-size:18px}
+.center{min-height:100vh;display:grid;place-items:center;padding:24px}.hero{max-width:760px;width:100%;text-align:center}.hero h1{font-size:56px}.hero p{font-size:18px;color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:25px}.choice{padding:25px;border:1px solid var(--line);border-radius:16px;background:#0c1c2d;text-align:left}
+.toast{position:fixed;right:20px;bottom:20px;background:#182b40;border:1px solid var(--line);padding:13px 16px;border-radius:10px;display:none;z-index:10}
+.monitor{max-width:1500px}.monitor .top h1{font-size:38px}.leader{font-size:18px}.leader td{padding:16px 12px}.leader .top3{font-size:24px}.hidden{display:none!important}
+@media(max-width:900px){.span8,.span6,.span4,.span3{grid-column:span 12}.cards{grid-template-columns:1fr}.asset{grid-template-columns:1fr 110px 75px}.hero h1{font-size:42px}}
+</style>
+</head>
+<body><div id="app"></div><div id="toast" class="toast"></div>
+<script>
+const socket=io(); let S=null, role=null, teamId=null;
+const START=1000000;
+const fmt=n=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(n||0));
+const pct=n=>(Number(n||0)>=0?"+":"")+Number(n||0).toFixed(2)+"%";
+function toast(m){const x=document.getElementById("toast");x.textContent=m;x.style.display="block";setTimeout(()=>x.style.display="none",2500)}
+socket.on("state",s=>{S=s; render()});
+socket.on("errorMessage",m=>toast(m));
+
+function render(){
+  const path=location.pathname;
+  if(path==="/team") return renderTeam();
+  if(path==="/admin") return renderAdmin();
+  if(path==="/monitor") return renderMonitor();
+  return renderHome();
+}
+function renderHome(){
+document.getElementById("app").innerHTML=`<div class="center"><div class="hero"><div class="pill">COLLEGE FINANCE + AI COMPETITION</div><h1>AI MONEY WAR</h1><p>Build a ₹10 lakh portfolio, survive the market shock, and prove your strategy.</p><div class="cards">
+<a class="choice" href="/team"><h2>👥 Team Portal</h2><p class="muted">Join your team and build the portfolio.</p></a>
+<a class="choice" href="/admin"><h2>⚙️ Organizer</h2><p class="muted">Control the event, shock and scoring.</p></a>
+<a class="choice" href="/monitor"><h2>📺 Live Monitor</h2><p class="muted">Project the live scoreboard.</p></a>
+</div></div></div>`;
+}
+function renderTeam(){
+ if(!teamId){
+   document.getElementById("app").innerHTML=`<div class="center"><div class="hero card"><div class="pill">PARTICIPANT PORTAL</div><h1>Join your team</h1><p class="muted">Select your team code.</p><div class="cards" style="grid-template-columns:repeat(4,1fr)">${S?.teams?.map(t=>`<button onclick="join('${t.id}')">${t.id}<br><small>${t.name}</small></button>`).join("")||""}</div></div></div>`; return;
+ }
+ const t=S.teams.find(x=>x.id===teamId);
+ const locked=t?.locked, phase=S.phase;
+ const full=window._portfolio||Object.fromEntries(S.assets.map(([id])=>[id,0]));
+ const total=Object.values(full).reduce((a,b)=>a+Number(b||0),0);
+ document.getElementById("app").innerHTML=`<div class="wrap"><div class="top"><div><div class="brand">AI MONEY WAR</div><div class="muted">${t?.name||teamId}</div></div><div class="row"><span class="pill">${phase.toUpperCase()}</span><a href="/" class="pill">Exit</a></div></div>
+ <div class="grid">
+ <div class="card span3"><div class="muted">Starting Capital</div><div class="big money">${fmt(START)}</div></div>
+ <div class="card span3"><div class="muted">Allocated</div><div class="big money">${fmt(total)}</div></div>
+ <div class="card span3"><div class="muted">Remaining</div><div class="big money">${fmt(START-total)}</div></div>
+ <div class="card span3"><div class="muted">Status</div><div class="big">${locked?"🔒":"✎"}</div></div>
+ <div class="card span8"><div class="row space"><h2>Build your portfolio</h2><span class="muted">Must equal ₹10,00,000</span></div>
+ ${S.assets.map(([id,name])=>`<div class="asset"><div><b>${name}</b><br><small>${id}</small></div><input ${locked||phase!=="investment"?"disabled":""} type="number" min="0" step="1000" value="${full[id]||0}" oninput="setAmt('${id}',this.value)"><div class="money">${total?((Number(full[id]||0)/total)*100).toFixed(1):"0.0"}%</div></div>`).join("")}
+ <div style="margin-top:15px" class="row"><button ${locked||phase!=="investment"?"disabled":""} onclick="save(false)">Save</button><button ${locked||phase!=="investment"?"disabled":""} onclick="save(true)">🔒 Lock Portfolio</button></div></div>
+ <div class="card span4"><h2>AI Strategy</h2><p class="muted">Paste your key AI reasoning/prompt summary. The organizer will score the quality of AI usage out of 10.</p><textarea id="reason" ${locked||phase!=="investment"?"disabled":""}>${t?.hasReasoning?"Saved — edit is unavailable after save/lock.":""}</textarea>
+ ${phase==="results"?`<hr><h3>Market Shock</h3><p>${S.eventName}</p><p class="muted">${S.eventDescription}</p><div class="big">${fmt(t?.finalValue)}</div><div>${pct(t?.returnPct)} return</div>`:""}
+ </div></div></div>`;
+}
+function join(id){teamId=id;socket.emit("joinTeam",{teamId:id});render()}
+function setAmt(id,v){window._portfolio=window._portfolio||Object.fromEntries(S.assets.map(([x])=>[x,0]));window._portfolio[id]=Math.max(0,Math.round(Number(v)||0));render()}
+function save(lock){
+ const reason=document.getElementById("reason")?.value||"";
+ const total=Object.values(window._portfolio||{}).reduce((a,b)=>a+Number(b||0),0);
+ if(total!==START){toast("Allocation must equal exactly ₹10,00,000.");return}
+ const payload={teamId,portfolio:window._portfolio,aiReasoning:reason};
+ socket.emit(lock?"lockPortfolio":"savePortfolio",payload); if(lock) toast("Portfolio locked.");
+}
+
+function renderAdmin(){
+document.getElementById("app").innerHTML=`<div class="wrap"><div class="top"><div><div class="brand">AI MONEY WAR / ADMIN</div><div class="muted">Organizer control room</div></div><div class="row"><span class="pill">PHASE: ${S.phase.toUpperCase()}</span><a href="/" class="pill">Home</a></div></div>
+<div class="grid">
+<div class="card span8"><h2>Competition control</h2><div class="row">
+<button onclick="startGame()">▶ Start 7-min Investment</button>
+<button class="danger" onclick="resetGame()">Reset Competition</button>
+</div><div style="margin-top:18px"><div class="muted">Timer</div><div class="big">${S.endsAt?Math.max(0,Math.ceil((S.endsAt-Date.now())/1000))+" sec":"Not started"}</div></div></div>
+<div class="card span4"><h2>Live status</h2><p>Joined: <b>${S.teams.filter(t=>t.joined).length}/12</b></p><p>Locked: <b>${S.teams.filter(t=>t.locked).length}/12</b></p><p>Results: <b>${S.resultsPublished?"Published":"Hidden"}</b></p></div>
+<div class="card span6"><h2>Market Shock</h2><input id="eventName" value="${S.eventName}" placeholder="Event name"><br><br><input id="eventDesc" value="${S.eventDescription}" placeholder="Description"><div style="margin-top:10px">${S.assets.map(([id,name])=>`<div class="asset"><div>${name}</div><input id="imp-${id}" type="number" step="0.5" value="${S.impacts[id]||0}"><div>${(S.impacts[id]||0)>=0?"+":""}${S.impacts[id]||0}%</div></div>`).join("")}</div><button style="margin-top:15px" onclick="reveal()">⚡ Reveal Market Shock & Calculate Results</button></div>
+<div class="card span6"><h2>Teams & AI scores</h2><table><thead><tr><th>Team</th><th>Joined</th><th>Locked</th><th>AI /10</th></tr></thead><tbody>${S.teams.map(t=>`<tr><td><b>${t.name}</b></td><td>${t.joined?"✓":"—"}</td><td>${t.locked?"🔒":"—"}</td><td><input style="width:70px" type="number" min="0" max="10" value="${t.totalScore-t.performancePoints}" onchange="aiScore('${t.id}',this.value)"></td></tr>`).join("")}</tbody></table></div>
+<div class="card span12"><h2>Current leaderboard</h2>${leaderboard(true)}</div></div></div>`;
+}
+function startGame(){socket.emit("adminStart",{durationSeconds:420});toast("Investment phase started.")}
+function resetGame(){if(confirm("Reset the entire competition?"))socket.emit("adminReset")}
+function reveal(){
+ const impacts={};S.assets.forEach(([id])=>impacts[id]=Number(document.getElementById("imp-"+id).value||0));
+ socket.emit("adminRevealShock",{eventName:document.getElementById("eventName").value,eventDescription:document.getElementById("eventDesc").value,impacts});
+}
+function aiScore(id,v){socket.emit("adminSetAIScore",{teamId:id,score:v})}
+
+function leaderboard(admin=false){
+ const rows=[...S.teams].filter(t=>t.finalValue!==null).sort((a,b)=>b.totalScore-a.totalScore);
+ return `<table class="leader"><thead><tr><th>Rank</th><th>Team</th><th>Portfolio Value</th><th>Return</th><th>Performance</th><th>AI</th><th>Total</th></tr></thead><tbody>${
+ rows.length?rows.map((t,i)=>`<tr class="${i<3?"top3":""}"><td class="rank">${i+1}</td><td><b>${t.name}</b></td><td class="money">${fmt(t.finalValue)}</td><td>${pct(t.returnPct)}</td><td>${t.performancePoints}</td><td>${t.totalScore-t.performancePoints}</td><td><b>${t.totalScore}</b></td></tr>`).join(""):"<tr><td colspan=7 class=muted>Results appear after the market shock is revealed.</td></tr>"}</tbody></table>`;
+}
+function renderMonitor(){
+document.getElementById("app").innerHTML=`<div class="wrap monitor"><div class="top"><div><div class="brand">AI MONEY WAR</div><div class="muted">${S.phase==="results"?S.eventName:"LIVE COMPETITION SCOREBOARD"}</div></div><div class="pill">${S.phase.toUpperCase()}</div></div>
+<div class="card"><div class="row space"><div><h1>LIVE LEADERBOARD</h1><p class="muted">${S.phase==="results"?S.eventDescription:"Waiting for competition results…"}</p></div><div class="big">${S.phase==="investment"&&S.endsAt?Math.max(0,Math.ceil((S.endsAt-Date.now())/1000))+"s":"🏆"}</div></div>${leaderboard(false)}</div></div>`;
+}
+setInterval(()=>{if(S){if(location.pathname==="/admin"||location.pathname==="/monitor")render()}},1000);
+render();
+</script>
+</body>
+</html>
